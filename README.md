@@ -1,3 +1,3 @@
 # Apps
-#Object Detection App
+Object Detection App:-
 https://anushreetomar.shinyapps.io/object_detection_app/
