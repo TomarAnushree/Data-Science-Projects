@@ -1,4 +1,6 @@
-# Apps
+# Data Science projects
+This repository contains Data Science Related projects accomplished over the time on various domains. It has been created and deployed for various interactive reports, dashboards and Machine learning and deep learning  models. 
+
 HR Analytics document:-
 https://anushreesoulpageit.shinyapps.io/HR_Analytics/
 
