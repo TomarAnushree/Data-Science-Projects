@@ -1,0 +1,340 @@
+---
+title: "Cedit Risk Model"
+author: "Anushree Tomar"
+date: "8-1-2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+# Import data
+```{r}
+Data <- read.delim("Credit Data.txt")
+
+```
+
+# Observing Data
+```{r}
+head(Data)
+```
+
+
+```{r}
+tail(Data)
+```
+
+## Removing Last 2 rows and 1 OBS. column
+```{r}
+Data<-Data[1:1000,-1]
+```
+
+## Data Preprocessing
+
+```{r}
+dim(Data)
+
+colnames(Data)
+```
+
+
+# Check Missing Values
+```{r}
+anyNA(Data)
+library(Amelia)
+missmap(Data)
+```
+
+
+# Checking for duplicate rows
+```{r}
+dim(Data)
+dim(unique(Data))
+dim(Data[!duplicated(Data),]) 
+dim(Data[duplicated(Data),])
+
+```
+
+
+
+```{r}
+str(Data)
+```
+
+# Change the data type of Data
+
+```{r}
+Data[,c(1,3:9,11,12,14:21,23:25,27,29:31)]<-lapply(Data[,c(1,3:9,11,12,14:21,23:25,27,29:31)],as.factor)
+Data[,c(2,10,13,22,26,28)]<-lapply(Data[,c(2,10,13,22,26,28)],as.numeric)
+
+str(Data)
+```
+
+# Exploratory Data Analysis
+```{r}
+library(psych)
+#Numerical data
+describe(Data[,c(2,10,13,22,26,28)], na.rm = TRUE, interp=FALSE,skew = TRUE, ranges = TRUE,trim=.1,
+              type=3,check=TRUE,fast=NULL,quant=NULL,IQR=FALSE,omit=FALSE)
+#categorical data
+summary(Data[,-c(2,10,13,22,26,28)])
+
+```
+# visualization
+# Univariate Analysis
+# Histogram For Distribution of num data
+```{r}
+num_data<-Data[,c(2,10,13,22,26,28)]
+for (i in 1:ncol(num_data)) {hist(num_data[[i]],main=colnames(num_data[i]),xlab = colnames(num_data[i]))
+}
+
+```
+
+# Correlation between num variables
+```{r}
+cor(num_data)
+pairs(num_data)
+```
+
+
+```{r}
+#save histogram value
+r<-hist(Data$DURATION)
+text(r$mids, r$density, r$counts, adj = c(.5, -.5), col = "blue3")
+sapply(r[2:3], sum)
+sum(r$density * diff(r$breaks)) # == 1
+
+```
+```{r}
+r<-hist(num_data$AMOUNT)
+text(r$mids, r$density, r$counts, adj = c(.5, -.5), col = "blue3")
+sapply(r[2:3], sum)
+sum(r$density * diff(r$breaks)) # == 1
+```
+
+```{r}
+r<-hist(num_data$INSTALL_RATE)
+text(r$mids, r$density, r$counts, adj = c(.5, -.5), col = "blue3")
+sapply(r[2:3], sum)
+sum(r$density * diff(r$breaks)) # == 1
+```
+```{r}
+r<-hist(num_data$AGE)
+text(r$mids, r$density, r$counts, adj = c(.5, -.5), col = "blue3")
+sapply(r[2:3], sum)
+sum(r$density * diff(r$breaks)) # == 1
+```
+
+```{r}
+r<-hist(num_data$NUM_CREDITS)
+text(r$mids, r$density, r$counts, adj = c(.5, -.5), col = "blue3")
+sapply(r[2:3], sum)
+sum(r$density * diff(r$breaks)) # == 1
+
+```
+
+```{r}
+r<-hist(num_data$NUM_DEPENDENTS)
+text(r$mids, r$density, r$counts, adj = c(.5, -.5), col = "blue3")
+sapply(r[2:3], sum)
+sum(r$density * diff(r$breaks)) # == 1
+```
+
+# Boxplot for checking outliers
+```{r}
+for (i in 1:ncol(num_data)) {boxplot(num_data[[i]],main=colnames(num_data[i]))
+}
+
+```
+# Barplot for categorical variable
+```{r}
+categorical<-Data[,-c(2,10,13,22,26,28)]
+for (i in 1:ncol(categorical)) {barplot(table(categorical[[i]]),main=colnames(categorical[i]))
+}
+
+```
+
+# Categorical variable Analysis with respect to Response variable
+
+
+```{r}
+cat("credit history vs responce")
+#aggregate.data.frame(Data$HISTORY,by=list(Data$RESPONSE),table)
+by(Data$HISTORY,list(Data$RESPONSE),table)
+
+cat("Education vs responce")
+by(Data$EDUCATION,list(Data$RESPONSE),table)
+
+cat("saving account vs responce")
+by(Data$SAV_ACCT,list(Data$RESPONSE),table)
+
+cat("emploment vs responce")
+by(Data$EMPLOYMENT,list(Data$RESPONSE),table)
+
+cat("owns real estate vs responce")
+by(Data$REAL_ESTATE,list(Data$RESPONSE),table)
+```
+
+# Numerical variable anlysis with respect to response variable
+```{r}
+boxplot(num_data$DURATION~Data$RESPONSE,ylab="Duration")
+boxplot(num_data$AMOUNT~Data$RESPONSE,ylab="Amount")
+#boxplot(num_data$INSTALL_RATE~Data$RESPONSE,ylab="installment" )
+boxplot(num_data$AGE~Data$RESPONSE,ylab="Age")
+#boxplot(num_data$NUM_CREDITS~Data$RESPONSE,ylab="NUM_CREDITS")
+#boxplot(num_data$NUM_DEPENDENTS~Data$RESPONSE,ylab="NUM_DEPENDENTS")
+```
+
+## Feature Selection using randomForest()
+```{r}
+library(randomForest)
+fit = randomForest(Data$RESPONSE ~., data = Data)
+varImpPlot(fit,n.var=10)
+importance(fit)
+```
+
+# Classification Model Building for prediction of good rating or bad rating
+```{r}
+#splitting data
+library(caret)
+set.seed(123)
+trainDataIndex <- createDataPartition(Data$RESPONSE, p=0.7, list = F)  # 70% training data
+trainData <- Data[trainDataIndex, ]
+testData <- Data[-trainDataIndex, ]
+prop.table(table(Data$RESPONSE))
+prop.table(table(trainData$RESPONSE))
+prop.table(table(testData$RESPONSE))
+#proportion of response variable is same in original and splitted data
+```
+# Model 1
+## Logistic Regression 
+
+```{r}
+attach(Data)
+logit<-glm(RESPONSE~.,family = binomial,data = trainData)
+summary(logit)#AIC: 688.62
+#Remove statistically insignifucant variable(as employment,rent) one by one with high p value
+logit<-glm(RESPONSE~.,family = binomial,data = trainData[,-c(12,3)])
+summary(logit)#AIC: 695.84
+logit<-glm(RESPONSE~.,family = binomial,data = trainData[,-c(12,11,28,24,6,14,9,20,19,16,27,17,21,4,22,30,26,18,2)])
+summary(logit)#AIC: 671.24
+#credit history with -('1: all credits at this bank paid back duly )have no significance 
+#and with critical account have significance
+logit<-glm(RESPONSE~.,family = binomial,data = trainData[,-c(12,11,28,24,6,14,9,20,19,16,27,17,21,4,22,30,26,18,2,3)])#AIC: 683.24
+summary(logit)
+
+#AIC value should decrese after elimination of variable in this way we select our statistically significant model
+```
+
+```{r}
+# Odds Ratio
+exp(coef(logit))#OR>1 positively correlated,OR<1 -ive correlation,lowest p value suggest highest association with response
+#chk_acct,history () +ive correlated)
+#Amount,instalment rate,education1 (-ive correlated) with the response variable
+```
+
+```{r}
+# Confusion matrix table 
+prob <- predict(logit,type=c("response"),testData)
+head(prob)
+
+
+confusion<-table(prob>0.5,testData$RESPONSE)
+confusion#,person with p>0.5 have good rating
+
+# Model Accuracy 
+Accuracy<-sum(diag(confusion)/sum(confusion))
+Accuracy# 0.6766667
+
+# ROC Curve 
+library(ROCR)
+rocrpred<-prediction(prob,testData$RESPONSE)
+rocrperf<-performance(rocrpred,'tpr','fpr')
+plot(rocrperf,colorize=T,text.adj=c(-0.2,1.7))
+# More area under the ROC Curve better is the logistic regression model obtained
+#Area under TP(senstivity) should be more here TP means probability of correct prediction
+#FP(type 1 error)
+
+```
+# KNN model with cross validation and parameter tuning
+```{r}
+library(e1071)
+#training and train control
+set.seed(400)
+trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3) 
+knn_fit <- train(RESPONSE ~., data = trainData, method = "knn", trControl=trctrl,preProcess = c("center", "scale"),tuneLength = 10)
+
+knn_fit #knn classifier
+#plot accuracy vs K Value graph 
+plot(knn_fit) 
+#predict classes for test set using knn classifier
+test_pred <- predict(knn_fit, newdata = testData[,-31])
+test_pred
+#Test set Statistics 
+confusionMatrix(test_pred, testData$RESPONSE )  #Accuracy : 0.6733
+
+```
+
+# SVM model with cross validation and parameter tuning
+```{r}
+library(kernlab)
+set.seed(400)
+trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3) 
+SVM_fit <- train(RESPONSE ~., data = trainData, method = "svmRadial", trControl=trctrl,preProcess = c("center", "scale"),tuneLength = 10)
+
+SVM_fit #SVM classifier
+#The final values used for the model were sigma = 0.01270901 and C = 2.
+#plot accuracy vs K Value graph 
+plot(SVM_fit) 
+#predict classes for test set using knn classifier
+test_pred <- predict(SVM_fit, newdata = testData[,-31])
+#test_pred
+#Test set Statistics 
+confusionMatrix(test_pred, testData$RESPONSE )  #Accuracy : 0.7333 
+
+```
+
+# Random forest classifier
+```{r}
+library(randomForest)
+attach(trainData)
+fit <- randomForest(RESPONSE~.,data=trainData,ntree=500)
+print(fit) # view results 
+fit$importance#gives gini index(priority of variables)
+importance(fit) # importance of each predictor max value more imp variables
+varImpPlot(fit)
+plot(fit)  
+votes<-as.data.frame(fit$votes)
+
+# Predicting test data 
+pred_test <-predict(fit,testData)
+confusionMatrix(table(pred_test,testData$RESPONSE))#Accuracy : 0.76 
+
+
+pred_train <-as.data.frame( predict(fit,trainData))
+confusionMatrix(table(pred_train$`predict(fit, trainData)`,trainData$RESPONSE))
+
+```
+
+# Model Selection by F1 score of SVM and Random Forest model
+f1 is defined as 2 * precision * recall / (precision + recall).
+precision is the proportion of retrieved documents that are relevant to a query and recall is the proportion of relevant documents that are successfully retrieved by a query. If there are zero relevant documents that are retrieved, zero relevant documents, or zero predicted documents, f1 is defined as 0.
+```{r}
+
+#for SVM
+library(Metrics)
+f1(testData$RESPONSE,test_pred)#1
+
+#for random Forest
+f1(testData$RESPONSE,pred_test)#1
+
+#
+```
+
+both model is good model because F1 score is 1 (perfect precision and recall)
+but on the basis of accuracy random forest model is good.
+svm model is good on the basis of senstivity(TP)value
+
+
+
+
