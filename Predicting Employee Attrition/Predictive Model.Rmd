@@ -1,0 +1,299 @@
+---
+title: "Predicting Employee Attrition"
+author: "Anushree Tomar"
+date: "21-11-2021"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+
+
+# Import Required Libraries
+```{r include=FALSE}
+library('data.table')
+library('catboost')
+library('CatEncoders')
+library('ggplot2')
+library('lattice')
+library('caret')
+library('rpart')
+library('rattle')
+library('rpart.plot')
+library('xgboost')
+library(ROCR)
+library(dplyr)
+```
+
+# Import Files 
+
+First read train and test data sets:-
+```{r}
+train<-fread("train_MpHjUjU.csv",stringsAsFactors = T,na.strings = "")
+test<-fread("test_hXY9mYw.csv",stringsAsFactors = T,na.strings = "")
+
+Sample_Submission<-fread("sample_submission_znWiLZ4.csv")
+
+head(train)
+```
+
+# Data Preprocessing
+
+## Create Target Variable
+
+Here we created our Target Variable by the information of Last Joining Date
+```{r}
+train$Target<-ifelse(is.na(train$LastWorkingDate)==T,"0","1")
+train$LastWorkingDate<-NULL
+train$Dateofjoining<-NULL
+
+```
+
+## Extract Year, Month And Day 
+
+Now we will create new variables of Year,Month and Day extracted from Monthly Reporting variable.
+
+```{r}
+train<-data.table(train)
+train[,c("Year","Month","Day"):=list(year(train$`MMM-YY`),month(train$`MMM-YY`),weekdays(train$`MMM-YY`))]
+train$`MMM-YY`<-NULL
+head(train)
+
+```
+
+
+## Data Type of data
+
+Analyse Data Type and change accordingly
+```{r}
+str(train)
+```
+
+## Change Data Type
+
+```{r}
+train$Age<-as.numeric(train$Age)
+train[,c("Joining Designation","Designation","Quarterly Rating","Target","Year","Month","Day")]<-lapply(train[,c("Joining Designation","Designation","Quarterly Rating","Target","Year","Month","Day")], as.factor)
+```
+
+
+## Binning of Age 
+
+In this step we will create groups of the age attribute and label them as 0-4, 5-9, 10-14 and so on.
+
+
+```{r}
+#Binning of Age 
+label <- c(paste(seq(0, 95, by = 5), seq(0 + 5 - 1, 100 - 1, by = 5),
+                sep = "-"), paste(100, "+", sep = ""))
+train$Age <- cut(train$Age, breaks = c(seq(0, 100, by = 5), Inf), labels = label, right = FALSE)
+
+```
+
+
+## Test Data
+
+Isolate Test and Train table with Employee ID
+```{r}
+train_emp_id<-table(train$Emp_ID)#2381
+
+# Isolate by Emp_ID
+Test<-left_join(test,train,by="Emp_ID")
+# Remove Target
+Test$Target<-NULL
+
+# Check unique Id
+Test_emp_id<-table(Test$Emp_ID)#741
+
+
+# Isolate Train  Data
+Train<-anti_join(train,test,by="Emp_ID")
+
+# Check unique Id
+Train_emp_id<-table(Train$Emp_ID)#1640
+Train$Emp_ID<-NULL
+
+```
+
+
+
+
+# Data Pre-processing for XGboost model
+
+# Encoding categorical variables
+```{r}
+cat_data<-Train[, lapply(Train, class) == 'factor', with = FALSE]
+cont_data<-Train[,lapply(Train, class) != 'factor', with = FALSE]
+cat_col <- colnames(cat_data)
+
+
+encode <- sapply(cat_data, function(x) LabelEncoder.fit(x))
+for (i in cat_col){
+    cat_data[[i]] <- transform(encode[[i]], Train[[i]])
+}
+
+cat_data <- cbind(cat_data, cont_data)
+str(cat_data)
+```
+
+# Data partitioning
+```{r}
+trainindex<-createDataPartition(cat_data$Target,p=0.7,list=F)
+traindata<-cat_data[trainindex,]
+testdata<-cat_data[-trainindex,]
+```
+
+# Encoding categorical variables of Test
+```{r}
+cat_data<-Test[, lapply(Test, class) == 'factor', with = FALSE]
+cont_data<-Test[,lapply(Test, class) != 'factor', with = FALSE]
+cat_col <- colnames(cat_data)
+
+
+encode <- sapply(cat_data, function(x) LabelEncoder.fit(x))
+for (i in cat_col){
+    cat_data[[i]] <- transform(encode[[i]], Test[[i]])
+}
+
+cat_data <- cbind(cat_data, cont_data)
+cat_data<-cat_data[,-"Emp_ID"]
+str(cat_data)
+```
+
+# XgBoost Model
+```{r,echo=FALSE}
+#Prepare Matrix
+traindata[,"Target"]<-ifelse(traindata[,"Target"]==1,"0","1")
+dtrain <- xgb.DMatrix(as.matrix(traindata[,-"Target"]), label = as.matrix(traindata[,'Target']))
+testdata[,"Target"]<-ifelse(testdata[,"Target"]==1,"0","1")
+dtest<-xgb.DMatrix(as.matrix(testdata[,-"Target"]), label = as.matrix(testdata[,'Target']))
+
+
+dtestfinal<-xgb.DMatrix(as.matrix(cat_data))
+
+
+
+#using grid search par
+params <- list(booster = "gbtree", objective = "binary:logistic", eta=0.4, max_depth=15, min_child_weight=0.5, subsample=1, colsample_bytree=0.5)
+
+
+
+#find best nround
+
+cv<-xgb.cv( params = params, data = dtrain, nrounds = 75, nfold = 5,gamma=4, showsd = T, stratified = T, print_every_n = 10, early_stopping_rounds = 20, maximize = F)
+
+cv$best_iteration
+print(cv)
+print(cv, verbose=TRUE)
+
+xgb1 <- xgb.train (params = params, data = dtrain, nrounds = 100, watchlist = list(val=dtest,train=dtrain), print_every_n = 10, early_stopping_rounds = 20,gamma=4, maximize = F , eval_metric = "error")
+
+
+```
+
+# Prediction on test data
+```{r}
+#model prediction
+ xgbpred <- predict (xgb1,dtest)
+ xgbpred <- ifelse (xgbpred > 0.5,"1","0")
+xgbpred<-data.frame("Target"= xgbpred)
+ 
+  xgbpredfinal <- predict(xgb1,dtestfinal)
+  xgbpredfinal <- ifelse(xgbpredfinal > 0.5,"1","0")
+  xgbpredfinal<-data.frame("Target"= xgbpredfinal)
+  
+  
+  
+  
+  Xgboostpred<-cbind(Test[,"Emp_ID"], xgbpredfinal)
+  
+
+Xgboostpred$Target<-as.numeric(Xgboostpred$Target)-1
+
+
+sub<-aggregate(Xgboostpred[,"Target"], by=list(Emp_ID=Xgboostpred$Emp_ID), FUN=sum)
+sub$Target<-ifelse(sub$Target>0,"1","0")
+#write.csv(sub,"sub2.csv",row.names = F,quote = F)
+
+
+```
+
+# Confusion Matrix
+```{r}
+confusionMatrix(factor(xgbpred$Target),factor(testdata$Target),positive = "1",mode="everything")
+
+```
+
+
+
+```{r}
+importance <- xgb.importance(feature_names = colnames(dtrain), model = xgb1)
+head(importance)
+xgb.plot.importance(importance_matrix = importance)
+```
+
+# Decision Tree Model
+
+# Data partitioning
+```{r}
+trainindex<-createDataPartition(Train$Target,p=0.7,list=F)
+traindata1<-Train[trainindex,]
+testdata1<-Train[-trainindex,]
+```
+
+```{r}
+#data_tree <- readRDS("./data_tree_relevel4.rds")
+data_tree <- rpart(Target~., method = "class", data = traindata1)
+summary(data_tree)
+# Find cp value of min xerror
+data_tree <- rpart(Target~., method = "class", data = traindata1,control = rpart.control(minsplit=0,cp=0))# min xerror
+
+summary(data_tree)
+```
+
+# Decision Tree
+```{r,echo=FALSE}
+
+fancyRpartPlot(data_tree)
+```
+
+
+Cp results
+```{r,echo=FALSE}
+printcp(data_tree)
+```
+
+# Making Prediction on test data
+```{r,echo=FALSE}
+prob_final <- predict(data_tree,testdata1[,-"Target"])
+class_final <- data.frame("y"=predict(data_tree,testdata1[,-"Target"],type="class"))
+table(class_final)
+```
+
+# Confusion Matrix
+```{r,echo=FALSE}
+
+confusionMatrix(table(class_final$y,testdata1$Target),positive = "1",mode="everything")
+
+```
+
+# Making Prediction on final test data
+```{r,echo=FALSE}
+prob_final <- predict(data_tree,Test[,-"Emp_ID"])
+class_final <- data.frame("Target"=predict(data_tree,Test[,-"Emp_ID"],type="class"))
+
+Test<-cbind(Test,class_final)
+
+submission<-Test[,c("Emp_ID","Target")]
+
+submission$Target<-as.numeric(submission$Target)-1
+
+
+sub<-aggregate(submission[,"Target"], by=list(Emp_ID=submission$Emp_ID), FUN=sum)
+sub$Target<-ifelse(sub$Target>0,"1","0")
+#write.csv(sub,"sub1.csv",row.names = F,quote = F)
+
+
+```
+
+
