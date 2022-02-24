@@ -4,3 +4,5 @@ This repository contains Data Science Related projects accomplished over the tim
 * [HR Analytics document](https://anushreesoulpageit.shinyapps.io/HR_Analytics/)
 * [Flight Delay Analysis](https://anushreesoulpageit.shinyapps.io/shiny/)
 * [Table/Text Extract App](https://anushreetomar.shinyapps.io/Table_Text_Extract_App/)
+* [Superstore Data Analysis](https://anushreetomar.shinyapps.io/Superstore_Sales_Dashboard/)
+
