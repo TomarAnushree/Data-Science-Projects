@@ -1,8 +1,10 @@
-
 # Shiny Dashboard for Superstore Data Analysis
 
 The Superstore data is at Customer ID, Order ID, and Order date level.
+
 Please refer to Definition sheet for information of each column.
 
 [Live App](https://anushreetomar.shinyapps.io/Superstore_Sales_Dashboard/)
-![]('tab1.jpg')
+
+![](tab1.PNG)
+![](tab2.PNG)
